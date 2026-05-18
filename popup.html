@@ -3,10 +3,121 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Webpage Summarizer & Q&A</title>
+  <title>Gemini Web Summarizer</title>
+  <!-- Google Fonts Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
+  <style>
+    /* Custom scrollbar for beautiful UI */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #475569;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
+  </style>
 </head>
-<body>
-  <h1>Summarizer Setup</h1>
+<body class="w-[420px] bg-slate-950 text-slate-100 font-sans antialiased overflow-y-auto max-h-[600px]">
+  <div class="p-5 flex flex-col space-y-4">
+    <!-- Header -->
+    <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+      <div class="flex items-center space-x-2">
+        <!-- Sparkles icon -->
+        <svg class="w-6 h-6 text-indigo-400 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
+        </svg>
+        <span class="text-lg font-bold bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">Gemini Summarizer</span>
+      </div>
+      <span class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full border border-slate-700">v1.0</span>
+    </div>
+
+    <!-- API Key Section -->
+    <div class="bg-slate-900 border border-slate-800 rounded-xl p-4.5 space-y-3 shadow-md">
+      <div class="flex justify-between items-center">
+        <label for="apiKey" class="text-xs font-semibold text-slate-300 uppercase tracking-wider">Gemini API Key</label>
+        <span id="keyStatus" class="text-[11px] text-slate-500 flex items-center space-x-1">
+          <span class="w-1.5 h-1.5 rounded-full bg-slate-600 inline-block mr-1"></span>Not Saved
+        </span>
+      </div>
+      <div class="flex space-x-2">
+        <input 
+          type="password" 
+          id="apiKey" 
+          placeholder="Enter your Gemini API key..." 
+          class="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+        />
+        <button 
+          id="saveKeyBtn" 
+          class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-lg px-4 py-2 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95 transition-all font-sans"
+        >
+          Save
+        </button>
+      </div>
+    </div>
+
+    <!-- Summarization Controls -->
+    <div class="space-y-4">
+      <button 
+        id="summarizeBtn" 
+        class="w-full py-3 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/30 active:scale-[0.98] transition-all flex items-center justify-center space-x-2"
+      >
+        <span>Summarize Active Page</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+        </svg>
+      </button>
+
+      <!-- Loading Spinner (Hidden by default) -->
+      <div id="loadingContainer" class="hidden flex flex-col items-center justify-center py-8 space-y-3">
+        <div class="relative w-10 h-10">
+          <div class="absolute inset-0 rounded-full border-4 border-slate-800"></div>
+          <div class="absolute inset-0 rounded-full border-4 border-t-indigo-500 animate-spin"></div>
+        </div>
+        <p class="text-sm text-slate-400 animate-pulse font-medium">Extracting & Summarizing page content...</p>
+      </div>
+
+      <!-- Result Container (Hidden by default) -->
+      <div id="resultContainer" class="hidden flex flex-col space-y-2">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Summary</span>
+          <button id="copyBtn" class="text-xs text-slate-400 hover:text-indigo-400 transition-colors flex items-center space-x-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path>
+            </svg>
+            <span>Copy</span>
+          </button>
+        </div>
+        <div 
+          id="summaryText" 
+          class="bg-slate-900 border border-slate-800 rounded-xl p-4 text-sm leading-relaxed text-slate-200 select-text overflow-y-auto max-h-[300px]"
+        >
+          <!-- Summary output will appear here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="popup.js"></script>
 </body>
 </html>
