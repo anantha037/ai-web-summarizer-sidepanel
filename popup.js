@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Summarize Action (Communicates with Background Script)
+  // Summarize Action (Communicates with Background Script and calls Gemini API)
   summarizeBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
     if (!key) {
@@ -72,46 +72,57 @@ document.addEventListener('DOMContentLoaded', () => {
     if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
       // Communicate with background service worker to extract active tab's text
       chrome.runtime.sendMessage({ action: "extractText" }, (response) => {
-        loadingContainer.classList.add('hidden');
-        resultContainer.classList.remove('hidden');
-
         if (chrome.runtime.lastError) {
+          loadingContainer.classList.add('hidden');
+          resultContainer.classList.remove('hidden');
           summaryText.innerHTML = `<span class="text-rose-400">Error: ${chrome.runtime.lastError.message}</span>`;
           return;
         }
 
         if (response && response.error) {
+          loadingContainer.classList.add('hidden');
+          resultContainer.classList.remove('hidden');
           summaryText.innerHTML = `<span class="text-rose-400">Error: ${response.error}</span>`;
         } else if (response && response.text) {
-          // Temporarily show that extraction worked
-          const textLength = response.text.length;
-          const snippet = response.text.substring(0, 150);
-          summaryText.innerHTML = `
-            <span class="text-emerald-400 font-semibold block mb-2">✓ Extraction Successful!</span>
-            <div class="text-xs text-slate-400 mb-2">Extracted ${textLength} characters from page.</div>
-            <div class="italic text-slate-300">"${snippet}..."</div>
-          `;
+          // Send active page text to Gemini API
+          generateSummary(key, response.text)
+            .then((summary) => {
+              loadingContainer.classList.add('hidden');
+              resultContainer.classList.remove('hidden');
+              summaryText.innerHTML = parseMarkdown(summary);
+            })
+            .catch((err) => {
+              loadingContainer.classList.add('hidden');
+              resultContainer.classList.remove('hidden');
+              summaryText.innerHTML = `<span class="text-rose-400">Gemini API Error: ${err.message}</span>`;
+            });
         } else {
+          loadingContainer.classList.add('hidden');
+          resultContainer.classList.remove('hidden');
           summaryText.innerHTML = `<span class="text-rose-400">Error: No content returned from page.</span>`;
         }
       });
     } else {
       // Fallback for regular web browser testing
-      setTimeout(() => {
-        loadingContainer.classList.add('hidden');
-        resultContainer.classList.remove('hidden');
-        summaryText.innerHTML = `
-          <span class="text-amber-400 font-semibold block mb-2">⚠ Browser Testing Mode</span>
-          <div class="text-xs text-slate-400 mb-2">Extracted 254 characters from mock browser page.</div>
-          <div class="italic text-slate-300">"This is a mocked webpage content for testing. Since the extension is running inside a standard web browser rather than as a loaded Chrome Extension, Chrome Extension APIs are unavailable..."</div>
-        `;
-      }, 1000);
+      const mockText = "Tailwind CSS is an open-source utility-first CSS framework. Unlike other CSS frameworks like Bootstrap, it does not provide pre-created classes for elements like buttons or cards. Instead, it provides low-level utility classes that let you build completely custom designs without leaving your HTML. This utility-first approach is incredibly fast, flexible, and extremely powerful for building modern premium user interfaces.";
+      generateSummary(key, mockText)
+        .then((summary) => {
+          loadingContainer.classList.add('hidden');
+          resultContainer.classList.remove('hidden');
+          summaryText.innerHTML = parseMarkdown(summary);
+        })
+        .catch((err) => {
+          loadingContainer.classList.add('hidden');
+          resultContainer.classList.remove('hidden');
+          summaryText.innerHTML = `<span class="text-rose-400">Gemini API Error: ${err.message}</span>`;
+        });
     }
   });
 
   // Copy to clipboard action
   copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(summaryText.textContent).then(() => {
+    // Get text content excluding any HTML formatting
+    navigator.clipboard.writeText(summaryText.innerText).then(() => {
       const originalText = copyBtn.innerHTML;
       copyBtn.innerHTML = `
         <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -125,11 +136,100 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Call Gemini API to generate the summary
+  async function generateSummary(apiKey, pageText) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+    
+    // Trim text if it exceeds a reasonable token limit (e.g. ~100k characters)
+    const maxChars = 100000;
+    const truncatedText = pageText.length > maxChars 
+      ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..." 
+      : pageText;
+
+    const prompt = `You are an elite, highly concise webpage summarizer. Below is the text extracted from the active webpage. Please analyze and summarize it.
+
+Follow these strict output guidelines:
+1. Provide a professional, engaging summary at the top (2-3 sentences).
+2. Create a "## Key Takeaways" section with 4-6 bullet points highlighting the most important facts/insights.
+3. If applicable, add a "## Notable Details" section with any key statistics, names, dates, or technical facts.
+4. Keep the tone objective and informative. Avoid phrases like "based on the text" or "this article says". Go straight to the information.
+
+Webpage Content to Summarize:
+---
+${truncatedText}
+---`;
+
+    const requestBody = {
+      contents: [
+        {
+          parts: [
+            {
+              text: prompt
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        temperature: 0.2,
+        topP: 0.95,
+        maxOutputTokens: 2048
+      }
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+      return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error("No summary generated. The page content might have been filtered or blocked.");
+    }
+  }
+
+  // Custom premium markdown parser to convert standard markdown into Tailwind-styled HTML elements
+  function parseMarkdown(text) {
+    if (!text) return "";
+    
+    // Escape HTML to prevent XSS injection
+    let html = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+
+    // Headings
+    html = html.replace(/^(?:###)\s+(.+)$/gm, '<h4 class="text-sm font-semibold text-indigo-400 mt-4 mb-2">$1</h4>');
+    html = html.replace(/^(?:##)\s+(.+)$/gm, '<h3 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 mt-5 mb-2 pb-1 border-b border-slate-800">$1</h3>');
+    html = html.replace(/^(?:#)\s+(.+)$/gm, '<h2 class="text-base font-bold text-purple-400 mt-6 mb-3">$1</h2>');
+
+    // Bold text (**text**)
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-indigo-300">$1</strong>');
+    
+    // Bullet points (- or * )
+    html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="ml-4 list-disc pl-1 my-1 text-slate-300">$1</li>');
+
+    // Handle newlines
+    html = html.replace(/\n/g, '<br>');
+
+    return html;
+  }
+
   function updateKeyStatus(isSaved) {
     if (isSaved) {
-      keyStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse"></span><span class="text-emerald-400">Saved</span>`;
+      keyStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse"></span><span class="text-emerald-400 font-sans">Saved</span>`;
     } else {
-      keyStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block mr-1"></span><span class="text-rose-400">Not Saved</span>`;
+      keyStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block mr-1"></span><span class="text-rose-400 font-sans">Not Saved</span>`;
     }
   }
 
