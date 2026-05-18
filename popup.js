@@ -8,6 +8,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const summaryText = document.getElementById('summaryText');
   const copyBtn = document.getElementById('copyBtn');
 
+  // Q&A DOM Elements
+  const chatInput = document.getElementById('chatInput');
+  const sendChatBtn = document.getElementById('sendChatBtn');
+  const chatHistory = document.getElementById('chatHistory');
+
+  // Mini-RAG State variables
+  let extractedPageText = "";
+  let originalSummary = "";
+  let conversationHistory = [];
+
   // Load saved API Key (Safely checking chrome.storage.local)
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
     chrome.storage.local.get(['gemini_api_key'], (result) => {
@@ -84,9 +94,19 @@ document.addEventListener('DOMContentLoaded', () => {
           resultContainer.classList.remove('hidden');
           summaryText.innerHTML = `<span class="text-rose-400">Error: ${response.error}</span>`;
         } else if (response && response.text) {
+          // Store extracted text for Q&A context
+          extractedPageText = response.text;
+          
+          // Reset chat interface
+          conversationHistory = [];
+          chatHistory.innerHTML = "";
+          chatHistory.classList.add('hidden');
+          chatInput.value = "";
+
           // Send active page text to Gemini API
           generateSummary(key, response.text)
             .then((summary) => {
+              originalSummary = summary;
               loadingContainer.classList.add('hidden');
               resultContainer.classList.remove('hidden');
               summaryText.innerHTML = parseMarkdown(summary);
@@ -105,8 +125,16 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       // Fallback for regular web browser testing
       const mockText = "Tailwind CSS is an open-source utility-first CSS framework. Unlike other CSS frameworks like Bootstrap, it does not provide pre-created classes for elements like buttons or cards. Instead, it provides low-level utility classes that let you build completely custom designs without leaving your HTML. This utility-first approach is incredibly fast, flexible, and extremely powerful for building modern premium user interfaces.";
+      
+      extractedPageText = mockText;
+      conversationHistory = [];
+      chatHistory.innerHTML = "";
+      chatHistory.classList.add('hidden');
+      chatInput.value = "";
+
       generateSummary(key, mockText)
         .then((summary) => {
+          originalSummary = summary;
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
           summaryText.innerHTML = parseMarkdown(summary);
@@ -135,6 +163,175 @@ document.addEventListener('DOMContentLoaded', () => {
       }, 1500);
     });
   });
+
+  // Handle Chat Q&A Interaction
+  async function handleChatSubmit() {
+    const query = chatInput.value.trim();
+    if (!query) return;
+
+    const key = apiKeyInput.value.trim();
+    if (!key) {
+      alert('Please save a valid Gemini API Key first!');
+      return;
+    }
+
+    // Disable input controls during API fetch
+    chatInput.disabled = true;
+    sendChatBtn.disabled = true;
+    chatInput.classList.add('opacity-50');
+    sendChatBtn.classList.add('opacity-50');
+
+    // 1. Add User Question Bubble
+    const userBubble = document.createElement('div');
+    userBubble.className = 'flex flex-col items-end space-y-1';
+    userBubble.innerHTML = `
+      <span class="text-[10px] text-slate-400 font-semibold mr-1">You</span>
+      <div class="bg-indigo-600 text-slate-100 rounded-2xl rounded-tr-none px-3.5 py-2 max-w-[85%] break-words shadow-sm">
+        ${escapeHtml(query)}
+      </div>
+    `;
+    chatHistory.appendChild(userBubble);
+    
+    // Show chat history panel if hidden
+    chatHistory.classList.remove('hidden');
+    
+    // Scroll chat history to bottom
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+
+    // Clear and reset the input
+    chatInput.value = "";
+
+    // 2. Add Bouncing Typing Loader Bubble
+    const typingBubble = document.createElement('div');
+    typingBubble.className = 'flex flex-col items-start space-y-1';
+    typingBubble.innerHTML = `
+      <span class="text-[10px] text-indigo-400 font-semibold ml-1">Gemini</span>
+      <div class="bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl rounded-tl-none px-3.5 py-2 max-w-[85%] shadow-sm flex items-center space-x-1">
+        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+      </div>
+    `;
+    chatHistory.appendChild(typingBubble);
+    chatHistory.scrollTop = chatHistory.scrollHeight;
+
+    // 3. Construct API Multi-Turn Chat Payload
+    // If it's the first question, we prime the LLM with context & original summary
+    if (conversationHistory.length === 0) {
+      const firstPrompt = `You are a helpful research assistant. Below is the text content extracted from the active webpage, along with the original summary you previously generated.
+Answer the user's follow-up questions accurately based on this content. If the answer cannot be found in the content, use your general knowledge but state that it isn't directly mentioned in the webpage.
+
+Webpage Content:
+---
+${extractedPageText}
+---
+
+Original Page Summary:
+${originalSummary}
+
+User's Follow-up Question:
+${query}`;
+
+      conversationHistory.push({
+        role: "user",
+        parts: [{ text: firstPrompt }]
+      });
+    } else {
+      conversationHistory.push({
+        role: "user",
+        parts: [{ text: query }]
+      });
+    }
+
+    try {
+      const answer = await callGeminiChatAPI(key, conversationHistory);
+      
+      // Save LLM response to state
+      conversationHistory.push({
+        role: "model",
+        parts: [{ text: answer }]
+      });
+
+      // 4. Replace Typing Bubble with real answer
+      typingBubble.innerHTML = `
+        <span class="text-[10px] text-indigo-400 font-semibold ml-1">Gemini</span>
+        <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none px-3.5 py-2 max-w-[85%] break-words shadow-sm leading-relaxed">
+          ${parseMarkdown(answer)}
+        </div>
+      `;
+    } catch (err) {
+      // Remove failed user query from conversationHistory to keep thread clean
+      conversationHistory.pop();
+
+      // Render API error inside bubble
+      typingBubble.innerHTML = `
+        <span class="text-[10px] text-rose-400 font-semibold ml-1">Gemini</span>
+        <div class="bg-slate-900 border border-rose-900/30 text-rose-400 rounded-2xl rounded-tl-none px-3.5 py-2 max-w-[85%] break-words shadow-sm">
+          Error: ${err.message}
+        </div>
+      `;
+    } finally {
+      // Re-enable inputs
+      chatInput.disabled = false;
+      sendChatBtn.disabled = false;
+      chatInput.classList.remove('opacity-50');
+      sendChatBtn.classList.remove('opacity-50');
+      chatInput.focus();
+
+      // Scroll to bottom
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+  }
+
+  // Listener wireups for Q&A
+  sendChatBtn.addEventListener('click', handleChatSubmit);
+  chatInput.addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') {
+      handleChatSubmit();
+    }
+  });
+
+  // Call Gemini API inside a chat session
+  async function callGeminiChatAPI(apiKey, contentsPayload) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: contentsPayload,
+        generationConfig: {
+          temperature: 0.3,
+          topP: 0.95,
+          maxOutputTokens: 1024
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
+      return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error("No answer generated. Content may have violated safety filters.");
+    }
+  }
+
+  // Escape HTML helper
+  function escapeHtml(text) {
+    if (!text) return "";
+    return text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
 
   // Call Gemini API to generate the summary
   async function generateSummary(apiKey, pageText) {
@@ -209,9 +406,9 @@ ${truncatedText}
       .replace(/>/g, "&gt;");
 
     // Headings
-    html = html.replace(/^(?:###)\s+(.+)$/gm, '<h4 class="text-sm font-semibold text-indigo-400 mt-4 mb-2">$1</h4>');
-    html = html.replace(/^(?:##)\s+(.+)$/gm, '<h3 class="text-sm font-semibold uppercase tracking-wider text-indigo-400 mt-5 mb-2 pb-1 border-b border-slate-800">$1</h3>');
-    html = html.replace(/^(?:#)\s+(.+)$/gm, '<h2 class="text-base font-bold text-purple-400 mt-6 mb-3">$1</h2>');
+    html = html.replace(/^(?:###)\s+(.+)$/gm, '<h4 class="text-xs font-semibold text-indigo-400 mt-4 mb-2">$1</h4>');
+    html = html.replace(/^(?:##)\s+(.+)$/gm, '<h3 class="text-xs font-semibold uppercase tracking-wider text-indigo-400 mt-5 mb-2 pb-1 border-b border-slate-800">$1</h3>');
+    html = html.replace(/^(?:#)\s+(.+)$/gm, '<h2 class="text-sm font-bold text-purple-400 mt-6 mb-3">$1</h2>');
 
     // Bold text (**text**)
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-indigo-300">$1</strong>');
