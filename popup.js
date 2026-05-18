@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Summarize Action (Interactive Mock for Topic 2)
+  // Summarize Action (Communicates with Background Script)
   summarizeBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
     if (!key) {
@@ -69,12 +69,44 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingContainer.classList.remove('hidden');
     resultContainer.classList.add('hidden');
 
-    // Simulate standard extension delay to test spinner / layout transitions
-    setTimeout(() => {
-      loadingContainer.classList.add('hidden');
-      resultContainer.classList.remove('hidden');
-      summaryText.textContent = "This is a placeholder summary designed to preview the gorgeous layout of the response box. In the upcoming steps, we will inject a content script to scrape the active page and feed it into the Google Gemini API to get actual, real-time summaries!";
-    }, 1500);
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.sendMessage) {
+      // Communicate with background service worker to extract active tab's text
+      chrome.runtime.sendMessage({ action: "extractText" }, (response) => {
+        loadingContainer.classList.add('hidden');
+        resultContainer.classList.remove('hidden');
+
+        if (chrome.runtime.lastError) {
+          summaryText.innerHTML = `<span class="text-rose-400">Error: ${chrome.runtime.lastError.message}</span>`;
+          return;
+        }
+
+        if (response && response.error) {
+          summaryText.innerHTML = `<span class="text-rose-400">Error: ${response.error}</span>`;
+        } else if (response && response.text) {
+          // Temporarily show that extraction worked
+          const textLength = response.text.length;
+          const snippet = response.text.substring(0, 150);
+          summaryText.innerHTML = `
+            <span class="text-emerald-400 font-semibold block mb-2">✓ Extraction Successful!</span>
+            <div class="text-xs text-slate-400 mb-2">Extracted ${textLength} characters from page.</div>
+            <div class="italic text-slate-300">"${snippet}..."</div>
+          `;
+        } else {
+          summaryText.innerHTML = `<span class="text-rose-400">Error: No content returned from page.</span>`;
+        }
+      });
+    } else {
+      // Fallback for regular web browser testing
+      setTimeout(() => {
+        loadingContainer.classList.add('hidden');
+        resultContainer.classList.remove('hidden');
+        summaryText.innerHTML = `
+          <span class="text-amber-400 font-semibold block mb-2">⚠ Browser Testing Mode</span>
+          <div class="text-xs text-slate-400 mb-2">Extracted 254 characters from mock browser page.</div>
+          <div class="italic text-slate-300">"This is a mocked webpage content for testing. Since the extension is running inside a standard web browser rather than as a loaded Chrome Extension, Chrome Extension APIs are unavailable..."</div>
+        `;
+      }, 1000);
+    }
   });
 
   // Copy to clipboard action
