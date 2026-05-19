@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const groqKeyStatus = document.getElementById('groqKeyStatus');
   
   const engineSelect = document.getElementById('engineSelect');
+  const formatSelect = document.getElementById('formatSelect');
   
   const summarizeBtn = document.getElementById('summarizeBtn');
   const loadingContainer = document.getElementById('loadingContainer');
@@ -27,7 +28,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load saved preferences & API Keys
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(['gemini_api_key', 'groq_api_key', 'active_engine'], (result) => {
+    chrome.storage.local.get(['gemini_api_key', 'groq_api_key', 'active_engine', 'active_format'], (result) => {
       if (result.gemini_api_key) {
         apiKeyInput.value = result.gemini_api_key;
         updateStatusIndicator(keyStatus, true);
@@ -47,12 +48,19 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         engineSelect.value = 'gemini';
       }
+
+      if (result.active_format) {
+        formatSelect.value = result.active_format;
+      } else {
+        formatSelect.value = 'standard';
+      }
     });
   } else {
     // Fallback for regular web browser testing
     const geminiKey = localStorage.getItem('gemini_api_key');
     const groqKey = localStorage.getItem('groq_api_key');
     const engine = localStorage.getItem('active_engine') || 'gemini';
+    const format = localStorage.getItem('active_format') || 'standard';
 
     if (geminiKey) {
       apiKeyInput.value = geminiKey;
@@ -69,6 +77,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     engineSelect.value = engine;
+    formatSelect.value = format;
   }
 
   // Save Gemini API Key
@@ -137,9 +146,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Save Format preference
+  formatSelect.addEventListener('change', () => {
+    const format = formatSelect.value;
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ active_format: format });
+    } else {
+      localStorage.setItem('active_format', format);
+    }
+  });
+
   // Summarize Action (Communicates with Background Script and calls Gemini or Groq API)
   summarizeBtn.addEventListener('click', () => {
     const engine = engineSelect.value;
+    const format = formatSelect.value;
     const key = engine === 'gemini' ? apiKeyInput.value.trim() : groqApiKeyInput.value.trim();
     
     if (!key) {
@@ -177,8 +197,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
           // Send active page text to selected API
           const summaryPromise = engine === 'gemini' 
-            ? generateSummary(key, response.text) 
-            : generateGroqSummary(key, response.text);
+            ? generateSummary(key, response.text, format) 
+            : generateGroqSummary(key, response.text, format);
 
           summaryPromise
             .then((summary) => {
@@ -209,8 +229,8 @@ document.addEventListener('DOMContentLoaded', () => {
       chatInput.value = "";
 
       const summaryPromise = engine === 'gemini' 
-        ? generateSummary(key, mockText) 
-        : generateGroqSummary(key, mockText);
+        ? generateSummary(key, mockText, format) 
+        : generateGroqSummary(key, mockText, format);
 
       summaryPromise
         .then((summary) => {
@@ -460,8 +480,40 @@ ${query}`;
       .replace(/>/g, "&gt;");
   }
 
+  // Helper to generate dynamic instructions depending on target format
+  function getSummarizationPrompt(pageText, format) {
+    let promptGuide = "";
+    if (format === 'bullets') {
+      promptGuide = `Follow these strict output guidelines:
+1. Do NOT write a paragraph summary at the top.
+2. Create a "## Key Takeaways" section with 8-12 comprehensive, detailed bullet points capturing the entire essence, facts, and structure of the page content.
+3. Keep the tone objective and informative. Avoid phrases like "based on the text" or "this article says". Go straight to the information.`;
+    } else if (format === 'eli5') {
+      promptGuide = `Follow these strict output guidelines:
+1. Summarize the webpage using extremely simple language, analogies, and short sentences, as if explaining to a 5-year-old child (2-3 sentences at the top).
+2. Create a "## Simple Explanation" section with 3-5 bullet points breaking down the core concepts in the simplest possible terms.
+3. Avoid any technical jargon, complex terms, or acronyms. Keep the tone warm, friendly, and accessible.`;
+    } else {
+      // 'standard'
+      promptGuide = `Follow these strict output guidelines:
+1. Provide a professional, engaging summary at the top (2-3 sentences).
+2. Create a "## Key Takeaways" section with 4-6 bullet points highlighting the most important facts/insights.
+3. If applicable, add a "## Notable Details" section with any key statistics, names, dates, or technical facts.
+4. Keep the tone objective and informative. Avoid phrases like "based on the text" or "this article says". Go straight to the information.`;
+    }
+
+    return `You are an elite, highly concise webpage summarizer. Below is the text extracted from the active webpage. Please analyze and summarize it.
+
+${promptGuide}
+
+Webpage Content to Summarize:
+---
+${pageText}
+---`;
+  }
+
   // Call Gemini API to generate the summary
-  async function generateSummary(apiKey, pageText) {
+  async function generateSummary(apiKey, pageText, format) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
     
     // Trim text if it exceeds a reasonable token limit (e.g. ~100k characters)
@@ -470,18 +522,7 @@ ${query}`;
       ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..." 
       : pageText;
 
-    const prompt = `You are an elite, highly concise webpage summarizer. Below is the text extracted from the active webpage. Please analyze and summarize it.
-
-Follow these strict output guidelines:
-1. Provide a professional, engaging summary at the top (2-3 sentences).
-2. Create a "## Key Takeaways" section with 4-6 bullet points highlighting the most important facts/insights.
-3. If applicable, add a "## Notable Details" section with any key statistics, names, dates, or technical facts.
-4. Keep the tone objective and informative. Avoid phrases like "based on the text" or "this article says". Go straight to the information.
-
-Webpage Content to Summarize:
----
-${truncatedText}
----`;
+    const prompt = getSummarizationPrompt(truncatedText, format);
 
     const requestBody = {
       contents: [
@@ -523,7 +564,7 @@ ${truncatedText}
   }
 
   // Call Groq API to generate the summary
-  async function generateGroqSummary(apiKey, pageText) {
+  async function generateGroqSummary(apiKey, pageText, format) {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
     
     // Trim text if it exceeds a reasonable token limit (e.g. ~60k characters for Llama 3 8B context window)
@@ -532,18 +573,7 @@ ${truncatedText}
       ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..." 
       : pageText;
 
-    const prompt = `You are an elite, highly concise webpage summarizer. Below is the text extracted from the active webpage. Please analyze and summarize it.
-
-Follow these strict output guidelines:
-1. Provide a professional, engaging summary at the top (2-3 sentences).
-2. Create a "## Key Takeaways" section with 4-6 bullet points highlighting the most important facts/insights.
-3. If applicable, add a "## Notable Details" section with any key statistics, names, dates, or technical facts.
-4. Keep the tone objective and informative. Avoid phrases like "based on the text" or "this article says". Go straight to the information.
-
-Webpage Content to Summarize:
----
-${truncatedText}
----`;
+    const prompt = getSummarizationPrompt(truncatedText, format);
 
     const requestBody = {
       model: "llama3-8b-8192",

@@ -78,12 +78,19 @@
 
     <!-- Summarization Controls -->
     <div class="results-area">
-      <button id="summarizeBtn" class="btn-primary">
-        <span>Summarize Active Page</span>
-        <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
-        </svg>
-      </button>
+      <div class="input-row">
+        <select id="formatSelect" class="input-text" style="flex: 1.2;">
+          <option value="standard">Standard Summary</option>
+          <option value="bullets">Bullet Points Only</option>
+          <option value="eli5">Explain Like I'm 5</option>
+        </select>
+        <button id="summarizeBtn" class="btn-primary" style="flex: 1.8; width: auto; font-size: 13px;">
+          <span>Summarize Page</span>
+          <svg class="icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+          </svg>
+        </button>
+      </div>
 
       <!-- Loading Spinner (Hidden by default) -->
       <div id="loadingContainer" class="loader-container hidden">
