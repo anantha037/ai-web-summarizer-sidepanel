@@ -21,36 +21,38 @@
   // Helper to extract YouTube subtitles/transcript
   async function getYouTubeTranscript() {
     let playerResponse = null;
-    const scripts = document.getElementsByTagName('script');
+
+    // Fetch the fresh raw HTML of the current video URL to bypass SPA caching/DOM mismatch
+    const htmlResponse = await fetch(window.location.href);
+    if (!htmlResponse.ok) {
+      throw new Error("Failed to fetch fresh page HTML");
+    }
+    const htmlText = await htmlResponse.text();
     
-    // Search for ytInitialPlayerResponse script tag
-    for (let script of scripts) {
-      const text = script.textContent;
-      const index = text.indexOf('ytInitialPlayerResponse =');
-      if (index !== -1) {
-        let jsonStr = text.substring(index + 'ytInitialPlayerResponse ='.length).trim();
-        // Use balancing braces to extract JSON object safely
-        let braceCount = 0;
-        let startPos = jsonStr.indexOf('{');
-        if (startPos !== -1) {
-          for (let i = startPos; i < jsonStr.length; i++) {
-            if (jsonStr[i] === '{') braceCount++;
-            else if (jsonStr[i] === '}') {
-              braceCount--;
-              if (braceCount === 0) {
-                const candidate = jsonStr.substring(startPos, i + 1);
-                try {
-                  playerResponse = JSON.parse(candidate);
-                  break;
-                } catch (e) {
-                  // Ignore parse error, try next
-                }
+    // Search the raw HTML string for ytInitialPlayerResponse =
+    const index = htmlText.indexOf('ytInitialPlayerResponse =');
+    if (index !== -1) {
+      let jsonStr = htmlText.substring(index + 'ytInitialPlayerResponse ='.length).trim();
+      // Use balancing braces to extract JSON object safely
+      let braceCount = 0;
+      let startPos = jsonStr.indexOf('{');
+      if (startPos !== -1) {
+        for (let i = startPos; i < jsonStr.length; i++) {
+          if (jsonStr[i] === '{') braceCount++;
+          else if (jsonStr[i] === '}') {
+            braceCount--;
+            if (braceCount === 0) {
+              const candidate = jsonStr.substring(startPos, i + 1);
+              try {
+                playerResponse = JSON.parse(candidate);
+                break;
+              } catch (e) {
+                // Ignore parse error
               }
             }
           }
         }
       }
-      if (playerResponse) break;
     }
 
     if (!playerResponse) {
