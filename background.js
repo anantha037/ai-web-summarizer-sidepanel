@@ -1,4 +1,35 @@
-// Background Service Worker for handling active tab querying and script injection
+// Background Service Worker for handling active tab querying, script injection, and context menus
+
+chrome.runtime.onInstalled.addListener(() => {
+  // Create Context Menu item on installation
+  chrome.contextMenus.create({
+    id: "summarizeSelection",
+    title: "Summarize Highlighted Text",
+    contexts: ["selection"]
+  });
+});
+
+// Listen for Context Menu clicks
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === "summarizeSelection") {
+    const selectionText = info.selectionText;
+    const url = tab ? tab.url : "";
+    
+    // Store selected text and URL for the popup to pick up
+    chrome.storage.local.set({
+      pending_selection_text: selectionText,
+      pending_selection_url: url
+    }, () => {
+      // Programmatically open the extension popup
+      if (chrome.action && chrome.action.openPopup) {
+        chrome.action.openPopup().catch((err) => {
+          console.warn("openPopup failed or is unsupported in this context:", err);
+        });
+      }
+    });
+  }
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "extractText") {
     // Query active tab in the current window

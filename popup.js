@@ -25,6 +25,7 @@ document.addEventListener('DOMContentLoaded', () => {
   let extractedPageText = "";
   let originalSummary = "";
   let conversationHistory = [];
+  let activeTabUrl = "";
 
   // Load saved preferences & API Keys
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
@@ -55,6 +56,17 @@ document.addEventListener('DOMContentLoaded', () => {
         formatSelect.value = 'standard';
       }
     });
+
+    // Query active tab URL to load chat history
+    if (chrome.tabs && chrome.tabs.query) {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        const activeTab = tabs[0];
+        if (activeTab && activeTab.url) {
+          activeTabUrl = activeTab.url;
+          checkPendingSelection(activeTabUrl);
+        }
+      });
+    }
   } else {
     // Fallback for regular web browser testing
     const geminiKey = localStorage.getItem('gemini_api_key');
@@ -78,6 +90,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     engineSelect.value = engine;
     formatSelect.value = format;
+
+    activeTabUrl = "http://localhost/mock-page";
+    checkPendingSelection(activeTabUrl);
   }
 
   // Save Gemini API Key
@@ -167,6 +182,10 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // Hide selection badge since we are summarizing the full page now
+    const selectionBadge = document.getElementById('selectionBadge');
+    if (selectionBadge) selectionBadge.classList.add('hidden');
+
     // Show loader, hide result
     loadingContainer.classList.remove('hidden');
     resultContainer.classList.add('hidden');
@@ -194,6 +213,7 @@ document.addEventListener('DOMContentLoaded', () => {
           chatHistory.innerHTML = "";
           chatHistory.classList.add('hidden');
           chatInput.value = "";
+          saveSession(activeTabUrl);
 
           // Send active page text to selected API
           const summaryPromise = engine === 'gemini' 
@@ -206,6 +226,7 @@ document.addEventListener('DOMContentLoaded', () => {
               loadingContainer.classList.add('hidden');
               resultContainer.classList.remove('hidden');
               summaryText.innerHTML = parseMarkdown(summary);
+              saveSession(activeTabUrl);
             })
             .catch((err) => {
               loadingContainer.classList.add('hidden');
@@ -227,6 +248,7 @@ document.addEventListener('DOMContentLoaded', () => {
       chatHistory.innerHTML = "";
       chatHistory.classList.add('hidden');
       chatInput.value = "";
+      saveSession(activeTabUrl);
 
       const summaryPromise = engine === 'gemini' 
         ? generateSummary(key, mockText, format) 
@@ -238,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
           summaryText.innerHTML = parseMarkdown(summary);
+          saveSession(activeTabUrl);
         })
         .catch((err) => {
           loadingContainer.classList.add('hidden');
@@ -342,6 +365,7 @@ ${query}`;
         content: query
       });
     }
+    saveSession(activeTabUrl);
 
     try {
       let answer = "";
@@ -356,6 +380,7 @@ ${query}`;
         role: "assistant",
         content: answer
       });
+      saveSession(activeTabUrl);
 
       // 4. Replace Typing Bubble with real answer
       typingBubble.innerHTML = `
@@ -367,6 +392,7 @@ ${query}`;
     } catch (err) {
       // Remove failed user query from conversationHistory to keep thread clean
       conversationHistory.pop();
+      saveSession(activeTabUrl);
 
       // Render API error inside bubble
       typingBubble.innerHTML = `
@@ -658,5 +684,182 @@ ${pageText}
       button.textContent = originalContent;
       button.classList.remove('btn-success', 'btn-danger');
     }, 1500);
+  }
+
+  // Save session details to local storage
+  function saveSession(url) {
+    if (!url) return;
+    const selectionBadge = document.getElementById('selectionBadge');
+    const isSelection = selectionBadge ? !selectionBadge.classList.contains('hidden') : false;
+    const sessionData = {
+      originalSummary,
+      extractedPageText,
+      conversationHistory,
+      isSelection
+    };
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ [`session_${url}`]: sessionData });
+    } else {
+      localStorage.setItem(`session_${url}`, JSON.stringify(sessionData));
+    }
+  }
+
+  // Load session details from storage
+  function loadSession(url) {
+    if (!url) return;
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get([`session_${url}`], (result) => {
+        const data = result[`session_${url}`];
+        if (data) {
+          restoreSessionData(data);
+        }
+      });
+    } else {
+      const raw = localStorage.getItem(`session_${url}`);
+      if (raw) {
+        try {
+          const data = JSON.parse(raw);
+          restoreSessionData(data);
+        } catch (e) {
+          console.error("Failed to load session", e);
+        }
+      }
+    }
+  }
+
+  // Restore session data to UI and state variables
+  function restoreSessionData(data) {
+    if (!data) return;
+    originalSummary = data.originalSummary || "";
+    extractedPageText = data.extractedPageText || "";
+    conversationHistory = data.conversationHistory || [];
+
+    const selectionBadge = document.getElementById('selectionBadge');
+    if (originalSummary) {
+      // Show summary container
+      resultContainer.classList.remove('hidden');
+      summaryText.innerHTML = parseMarkdown(originalSummary);
+      if (selectionBadge) {
+        if (data.isSelection) {
+          selectionBadge.classList.remove('hidden');
+        } else {
+          selectionBadge.classList.add('hidden');
+        }
+      }
+    }
+
+    if (conversationHistory.length > 0) {
+      // Show chat history
+      chatHistory.classList.remove('hidden');
+      chatHistory.innerHTML = "";
+
+      // Reconstruct the chat bubbles
+      conversationHistory.forEach((msg, idx) => {
+        // Clean display text (strip injected first-prompt headers from user message)
+        let displayContent = msg.content;
+        if (idx === 0 && msg.role === 'user') {
+          const searchStr = "User's Follow-up Question:\n";
+          const index = msg.content.indexOf(searchStr);
+          if (index !== -1) {
+            displayContent = msg.content.substring(index + searchStr.length);
+          }
+        }
+
+        const bubble = document.createElement('div');
+        if (msg.role === 'user') {
+          bubble.className = 'chat-message chat-message-user';
+          bubble.innerHTML = `
+            <span class="chat-sender">You</span>
+            <div class="chat-bubble bubble-user">
+              ${escapeHtml(displayContent)}
+            </div>
+          `;
+        } else {
+          // assistant
+          const engine = engineSelect.value;
+          bubble.className = 'chat-message chat-message-gemini';
+          bubble.innerHTML = `
+            <span class="chat-sender">${engine === 'gemini' ? 'Gemini' : 'Groq (Llama 3)'}</span>
+            <div class="chat-bubble bubble-gemini">
+              ${parseMarkdown(displayContent)}
+            </div>
+          `;
+        }
+        chatHistory.appendChild(bubble);
+      });
+
+      chatHistory.scrollTop = chatHistory.scrollHeight;
+    }
+  }
+
+  // Check if there is a pending selection to summarize
+  function checkPendingSelection(url) {
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['pending_selection_text', 'pending_selection_url'], (res) => {
+        if (res.pending_selection_text && res.pending_selection_url === url) {
+          // Clear immediately to prevent infinite triggers
+          chrome.storage.local.remove(['pending_selection_text', 'pending_selection_url']);
+          summarizeTextSelection(res.pending_selection_text);
+        } else {
+          loadSession(url);
+        }
+      });
+    } else {
+      const pendingText = localStorage.getItem('pending_selection_text');
+      const pendingUrl = localStorage.getItem('pending_selection_url');
+      if (pendingText && pendingUrl === url) {
+        localStorage.removeItem('pending_selection_text');
+        localStorage.removeItem('pending_selection_url');
+        summarizeTextSelection(pendingText);
+      } else {
+        loadSession(url);
+      }
+    }
+  }
+
+  // Handle summarization of a text selection
+  function summarizeTextSelection(text) {
+    const engine = engineSelect.value;
+    const format = formatSelect.value;
+    const key = engine === 'gemini' ? apiKeyInput.value.trim() : groqApiKeyInput.value.trim();
+
+    if (!key) {
+      alert(`Please save a valid ${engine === 'gemini' ? 'Gemini' : 'Groq'} API Key first!`);
+      loadSession(activeTabUrl);
+      return;
+    }
+
+    loadingContainer.classList.remove('hidden');
+    resultContainer.classList.add('hidden');
+
+    const selectionBadge = document.getElementById('selectionBadge');
+    if (selectionBadge) selectionBadge.classList.add('hidden');
+
+    extractedPageText = text;
+    conversationHistory = [];
+    chatHistory.innerHTML = "";
+    chatHistory.classList.add('hidden');
+    chatInput.value = "";
+    saveSession(activeTabUrl);
+
+    const summaryPromise = engine === 'gemini' 
+      ? generateSummary(key, text, format) 
+      : generateGroqSummary(key, text, format);
+
+    summaryPromise
+      .then((summary) => {
+        originalSummary = summary;
+        loadingContainer.classList.add('hidden');
+        resultContainer.classList.remove('hidden');
+        summaryText.innerHTML = parseMarkdown(summary);
+        
+        if (selectionBadge) selectionBadge.classList.remove('hidden');
+        saveSession(activeTabUrl);
+      })
+      .catch((err) => {
+        loadingContainer.classList.add('hidden');
+        resultContainer.classList.remove('hidden');
+        summaryText.innerHTML = `<span class="error-message">${engine === 'gemini' ? 'Gemini' : 'Groq'} API Error: ${err.message}</span>`;
+      });
   }
 });
