@@ -20,27 +20,59 @@
         <svg class="icon icon-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"></path>
         </svg>
-        <span class="brand-title">Gemini Summarizer</span>
+        <span class="brand-title">AI Web Summarizer</span>
       </div>
       <span class="version-badge">v1.0</span>
     </div>
 
-    <!-- API Key Section -->
+    <!-- AI Engine & Keys Section -->
     <div class="card">
       <div class="card-header">
-        <label for="apiKey" class="card-label">Gemini API Key</label>
-        <span id="keyStatus" class="status-badge">
-          <span class="status-dot"></span>Not Saved
-        </span>
+        <label for="engineSelect" class="card-label">Active AI Engine</label>
       </div>
       <div class="input-row">
-        <input 
-          type="password" 
-          id="apiKey" 
-          placeholder="Enter your Gemini API key..." 
-          class="input-text"
-        />
-        <button id="saveKeyBtn" class="btn-save">Save</button>
+        <select id="engineSelect" class="input-text">
+          <option value="gemini">Gemini 2.5 Flash</option>
+          <option value="groq">Groq Llama 3 (8B)</option>
+        </select>
+      </div>
+
+      <!-- Gemini Key Section -->
+      <div class="key-field-group">
+        <div class="card-header">
+          <label for="apiKey" class="card-label">Gemini API Key</label>
+          <span id="keyStatus" class="status-badge">
+            <span class="status-dot"></span>Not Saved
+          </span>
+        </div>
+        <div class="input-row">
+          <input 
+            type="password" 
+            id="apiKey" 
+            placeholder="Enter Gemini API key..." 
+            class="input-text"
+          />
+          <button id="saveKeyBtn" class="btn-save">Save</button>
+        </div>
+      </div>
+
+      <!-- Groq Key Section -->
+      <div class="key-field-group">
+        <div class="card-header">
+          <label for="groqApiKey" class="card-label">Groq API Key</label>
+          <span id="groqKeyStatus" class="status-badge">
+            <span class="status-dot"></span>Not Saved
+          </span>
+        </div>
+        <div class="input-row">
+          <input 
+            type="password" 
+            id="groqApiKey" 
+            placeholder="Enter Groq API key..." 
+            class="input-text"
+          />
+          <button id="saveGroqKeyBtn" class="btn-save">Save</button>
+        </div>
       </div>
     </div>
 

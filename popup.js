@@ -2,6 +2,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const apiKeyInput = document.getElementById('apiKey');
   const saveKeyBtn = document.getElementById('saveKeyBtn');
   const keyStatus = document.getElementById('keyStatus');
+  
+  const groqApiKeyInput = document.getElementById('groqApiKey');
+  const saveGroqKeyBtn = document.getElementById('saveGroqKeyBtn');
+  const groqKeyStatus = document.getElementById('groqKeyStatus');
+  
+  const engineSelect = document.getElementById('engineSelect');
+  
   const summarizeBtn = document.getElementById('summarizeBtn');
   const loadingContainer = document.getElementById('loadingContainer');
   const resultContainer = document.getElementById('resultContainer');
@@ -18,52 +25,115 @@ document.addEventListener('DOMContentLoaded', () => {
   let originalSummary = "";
   let conversationHistory = [];
 
-  // Load saved API Key (Safely checking chrome.storage.local)
+  // Load saved preferences & API Keys
   if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
-    chrome.storage.local.get(['gemini_api_key'], (result) => {
+    chrome.storage.local.get(['gemini_api_key', 'groq_api_key', 'active_engine'], (result) => {
       if (result.gemini_api_key) {
         apiKeyInput.value = result.gemini_api_key;
-        updateKeyStatus(true);
+        updateStatusIndicator(keyStatus, true);
       } else {
-        updateKeyStatus(false);
+        updateStatusIndicator(keyStatus, false);
+      }
+
+      if (result.groq_api_key) {
+        groqApiKeyInput.value = result.groq_api_key;
+        updateStatusIndicator(groqKeyStatus, true);
+      } else {
+        updateStatusIndicator(groqKeyStatus, false);
+      }
+
+      if (result.active_engine) {
+        engineSelect.value = result.active_engine;
+      } else {
+        engineSelect.value = 'gemini';
       }
     });
   } else {
     // Fallback for regular web browser testing
-    const localKey = localStorage.getItem('gemini_api_key');
-    if (localKey) {
-      apiKeyInput.value = localKey;
-      updateKeyStatus(true);
+    const geminiKey = localStorage.getItem('gemini_api_key');
+    const groqKey = localStorage.getItem('groq_api_key');
+    const engine = localStorage.getItem('active_engine') || 'gemini';
+
+    if (geminiKey) {
+      apiKeyInput.value = geminiKey;
+      updateStatusIndicator(keyStatus, true);
     } else {
-      updateKeyStatus(false);
+      updateStatusIndicator(keyStatus, false);
     }
+
+    if (groqKey) {
+      groqApiKeyInput.value = groqKey;
+      updateStatusIndicator(groqKeyStatus, true);
+    } else {
+      updateStatusIndicator(groqKeyStatus, false);
+    }
+
+    engineSelect.value = engine;
   }
 
-  // Save API Key
+  // Save Gemini API Key
   saveKeyBtn.addEventListener('click', () => {
     const key = apiKeyInput.value.trim();
     if (key) {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.set({ gemini_api_key: key }, () => {
-          updateKeyStatus(true);
-          showTemporaryStatus('Saved!', 'success');
+          updateStatusIndicator(keyStatus, true);
+          showTemporaryStatus(saveKeyBtn, 'Saved!', 'success');
         });
       } else {
         localStorage.setItem('gemini_api_key', key);
-        updateKeyStatus(true);
-        showTemporaryStatus('Saved!', 'success');
+        updateStatusIndicator(keyStatus, true);
+        showTemporaryStatus(saveKeyBtn, 'Saved!', 'success');
       }
     } else {
       if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
         chrome.storage.local.remove(['gemini_api_key'], () => {
-          updateKeyStatus(false);
-          showTemporaryStatus('Cleared!', 'warning');
+          updateStatusIndicator(keyStatus, false);
+          showTemporaryStatus(saveKeyBtn, 'Cleared!', 'warning');
         });
       } else {
         localStorage.removeItem('gemini_api_key');
-        updateKeyStatus(false);
-        showTemporaryStatus('Cleared!', 'warning');
+        updateStatusIndicator(keyStatus, false);
+        showTemporaryStatus(saveKeyBtn, 'Cleared!', 'warning');
       }
+    }
+  });
+
+  // Save Groq API Key
+  saveGroqKeyBtn.addEventListener('click', () => {
+    const key = groqApiKeyInput.value.trim();
+    if (key) {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.set({ groq_api_key: key }, () => {
+          updateStatusIndicator(groqKeyStatus, true);
+          showTemporaryStatus(saveGroqKeyBtn, 'Saved!', 'success');
+        });
+      } else {
+        localStorage.setItem('groq_api_key', key);
+        updateStatusIndicator(groqKeyStatus, true);
+        showTemporaryStatus(saveGroqKeyBtn, 'Saved!', 'success');
+      }
+    } else {
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.remove(['groq_api_key'], () => {
+          updateStatusIndicator(groqKeyStatus, false);
+          showTemporaryStatus(saveGroqKeyBtn, 'Cleared!', 'warning');
+        });
+      } else {
+        localStorage.removeItem('groq_api_key');
+        updateStatusIndicator(groqKeyStatus, false);
+        showTemporaryStatus(saveGroqKeyBtn, 'Cleared!', 'warning');
+      }
+    }
+  });
+
+  // Save Active AI Engine preference
+  engineSelect.addEventListener('change', () => {
+    const engine = engineSelect.value;
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.set({ active_engine: engine });
+    } else {
+      localStorage.setItem('active_engine', engine);
     }
   });
 
@@ -418,26 +488,26 @@ ${truncatedText}
     return html;
   }
 
-  function updateKeyStatus(isSaved) {
+  function updateStatusIndicator(element, isSaved) {
     if (isSaved) {
-      keyStatus.innerHTML = `<span class="status-dot status-saved"></span><span class="text-saved">Saved</span>`;
+      element.innerHTML = `<span class="status-dot status-saved"></span><span class="text-saved">Saved</span>`;
     } else {
-      keyStatus.innerHTML = `<span class="status-dot status-unsaved"></span><span class="text-unsaved">Not Saved</span>`;
+      element.innerHTML = `<span class="status-dot status-unsaved"></span><span class="text-unsaved">Not Saved</span>`;
     }
   }
 
-  function showTemporaryStatus(message, type) {
-    const originalContent = saveKeyBtn.textContent;
-    saveKeyBtn.textContent = message;
+  function showTemporaryStatus(button, message, type) {
+    const originalContent = button.textContent;
+    button.textContent = message;
     if (type === 'success') {
-      saveKeyBtn.classList.add('btn-success');
+      button.classList.add('btn-success');
     } else {
-      saveKeyBtn.classList.add('btn-danger');
+      button.classList.add('btn-danger');
     }
 
     setTimeout(() => {
-      saveKeyBtn.textContent = originalContent;
-      saveKeyBtn.classList.remove('btn-success', 'btn-danger');
+      button.textContent = originalContent;
+      button.classList.remove('btn-success', 'btn-danger');
     }, 1500);
   }
 });
