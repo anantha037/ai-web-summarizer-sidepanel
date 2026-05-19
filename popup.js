@@ -2,14 +2,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const apiKeyInput = document.getElementById('apiKey');
   const saveKeyBtn = document.getElementById('saveKeyBtn');
   const keyStatus = document.getElementById('keyStatus');
-  
+
   const groqApiKeyInput = document.getElementById('groqApiKey');
   const saveGroqKeyBtn = document.getElementById('saveGroqKeyBtn');
   const groqKeyStatus = document.getElementById('groqKeyStatus');
-  
+
   const engineSelect = document.getElementById('engineSelect');
   const formatSelect = document.getElementById('formatSelect');
-  
+
   const summarizeBtn = document.getElementById('summarizeBtn');
   const loadingContainer = document.getElementById('loadingContainer');
   const resultContainer = document.getElementById('resultContainer');
@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const engine = engineSelect.value;
     const format = formatSelect.value;
     const key = engine === 'gemini' ? apiKeyInput.value.trim() : groqApiKeyInput.value.trim();
-    
+
     if (!key) {
       alert(`Please save a valid ${engine === 'gemini' ? 'Gemini' : 'Groq'} API Key first!`);
       return;
@@ -207,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (response && response.text) {
           // Store extracted text for Q&A context
           extractedPageText = response.text;
-          
+
           // Reset chat interface
           conversationHistory = [];
           chatHistory.innerHTML = "";
@@ -216,8 +216,8 @@ document.addEventListener('DOMContentLoaded', () => {
           saveSession(activeTabUrl);
 
           // Send active page text to selected API
-          const summaryPromise = engine === 'gemini' 
-            ? generateSummary(key, response.text, format) 
+          const summaryPromise = engine === 'gemini'
+            ? generateSummary(key, response.text, format)
             : generateGroqSummary(key, response.text, format);
 
           summaryPromise
@@ -242,7 +242,7 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       // Fallback for regular web browser testing
       const mockText = "Tailwind CSS is an open-source utility-first CSS framework. Unlike other CSS frameworks like Bootstrap, it does not provide pre-created classes for elements like buttons or cards. Instead, it provides low-level utility classes that let you build completely custom designs without leaving your HTML. This utility-first approach is incredibly fast, flexible, and extremely powerful for building modern premium user interfaces.";
-      
+
       extractedPageText = mockText;
       conversationHistory = [];
       chatHistory.innerHTML = "";
@@ -250,8 +250,8 @@ document.addEventListener('DOMContentLoaded', () => {
       chatInput.value = "";
       saveSession(activeTabUrl);
 
-      const summaryPromise = engine === 'gemini' 
-        ? generateSummary(key, mockText, format) 
+      const summaryPromise = engine === 'gemini'
+        ? generateSummary(key, mockText, format)
         : generateGroqSummary(key, mockText, format);
 
       summaryPromise
@@ -294,7 +294,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const engine = engineSelect.value;
     const key = engine === 'gemini' ? apiKeyInput.value.trim() : groqApiKeyInput.value.trim();
-    
+
     if (!key) {
       alert(`Please save a valid ${engine === 'gemini' ? 'Gemini' : 'Groq'} API Key first!`);
       return;
@@ -314,10 +314,10 @@ document.addEventListener('DOMContentLoaded', () => {
       </div>
     `;
     chatHistory.appendChild(userBubble);
-    
+
     // Show chat history panel if hidden
     chatHistory.classList.remove('hidden');
-    
+
     // Scroll chat history to bottom
     chatHistory.scrollTop = chatHistory.scrollHeight;
 
@@ -374,7 +374,7 @@ ${query}`;
       } else {
         answer = await callGroqChatAPI(key, conversationHistory);
       }
-      
+
       // Save LLM response to state
       conversationHistory.push({
         role: "assistant",
@@ -476,7 +476,7 @@ ${query}`;
         'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
-        model: "llama3-8b-8192",
+        model: "llama-3.1-8b-instant",
         messages: groqMessages,
         temperature: 0.3,
         max_tokens: 1024
@@ -541,11 +541,11 @@ ${pageText}
   // Call Gemini API to generate the summary
   async function generateSummary(apiKey, pageText, format) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-    
+
     // Trim text if it exceeds a reasonable token limit (e.g. ~100k characters)
     const maxChars = 100000;
-    const truncatedText = pageText.length > maxChars 
-      ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..." 
+    const truncatedText = pageText.length > maxChars
+      ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..."
       : pageText;
 
     const prompt = getSummarizationPrompt(truncatedText, format);
@@ -592,17 +592,17 @@ ${pageText}
   // Call Groq API to generate the summary
   async function generateGroqSummary(apiKey, pageText, format) {
     const url = 'https://api.groq.com/openai/v1/chat/completions';
-    
+
     // Trim text if it exceeds a reasonable token limit (e.g. ~60k characters for Llama 3 8B context window)
     const maxChars = 60000;
-    const truncatedText = pageText.length > maxChars 
-      ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..." 
+    const truncatedText = pageText.length > maxChars
+      ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..."
       : pageText;
 
     const prompt = getSummarizationPrompt(truncatedText, format);
 
     const requestBody = {
-      model: "llama3-8b-8192",
+      model: "llama-3.1-8b-instant",
       messages: [
         {
           role: "user",
@@ -639,7 +639,7 @@ ${pageText}
   // Custom premium markdown parser to convert standard markdown into Tailwind-styled HTML elements
   function parseMarkdown(text) {
     if (!text) return "";
-    
+
     // Escape HTML to prevent XSS injection
     let html = text
       .replace(/&/g, "&amp;")
@@ -653,7 +653,7 @@ ${pageText}
 
     // Bold text (**text**)
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="md-strong">$1</strong>');
-    
+
     // Bullet points (- or * )
     html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="md-li">$1</li>');
 
@@ -842,8 +842,8 @@ ${pageText}
     chatInput.value = "";
     saveSession(activeTabUrl);
 
-    const summaryPromise = engine === 'gemini' 
-      ? generateSummary(key, text, format) 
+    const summaryPromise = engine === 'gemini'
+      ? generateSummary(key, text, format)
       : generateGroqSummary(key, text, format);
 
     summaryPromise
@@ -852,7 +852,7 @@ ${pageText}
         loadingContainer.classList.add('hidden');
         resultContainer.classList.remove('hidden');
         summaryText.innerHTML = parseMarkdown(summary);
-        
+
         if (selectionBadge) selectionBadge.classList.remove('hidden');
         saveSession(activeTabUrl);
       })

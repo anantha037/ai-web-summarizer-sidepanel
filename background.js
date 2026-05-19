@@ -1,4 +1,9 @@
-// Background Service Worker for handling active tab querying, script injection, and context menus
+// Ensure that clicking the extension's toolbar icon opens the side panel
+if (chrome.sidePanel && chrome.sidePanel.setPanelBehavior) {
+  chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((err) => {
+    console.warn("setPanelBehavior failed:", err);
+  });
+}
 
 chrome.runtime.onInstalled.addListener(() => {
   // Create Context Menu item on installation
@@ -20,10 +25,10 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
       pending_selection_text: selectionText,
       pending_selection_url: url
     }, () => {
-      // Programmatically open the extension popup
-      if (chrome.action && chrome.action.openPopup) {
-        chrome.action.openPopup().catch((err) => {
-          console.warn("openPopup failed or is unsupported in this context:", err);
+      // Programmatically open the side panel
+      if (chrome.sidePanel && chrome.sidePanel.open) {
+        chrome.sidePanel.open({ tabId: tab.id }).catch((err) => {
+          console.warn("sidePanel.open failed:", err);
         });
       }
     });

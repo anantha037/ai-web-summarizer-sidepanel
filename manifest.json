@@ -7,10 +7,12 @@
     "activeTab",
     "scripting",
     "storage",
-    "contextMenus"
+    "contextMenus",
+    "sidePanel"
   ],
-  "action": {
-    "default_popup": "popup.html"
+  "action": {},
+  "side_panel": {
+    "default_path": "popup.html"
   },
   "background": {
     "service_worker": "background.js"
