@@ -137,11 +137,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Summarize Action (Communicates with Background Script and calls Gemini API)
+  // Summarize Action (Communicates with Background Script and calls Gemini or Groq API)
   summarizeBtn.addEventListener('click', () => {
-    const key = apiKeyInput.value.trim();
+    const engine = engineSelect.value;
+    const key = engine === 'gemini' ? apiKeyInput.value.trim() : groqApiKeyInput.value.trim();
+    
     if (!key) {
-      alert('Please save a valid Gemini API Key first!');
+      alert(`Please save a valid ${engine === 'gemini' ? 'Gemini' : 'Groq'} API Key first!`);
       return;
     }
 
@@ -173,8 +175,12 @@ document.addEventListener('DOMContentLoaded', () => {
           chatHistory.classList.add('hidden');
           chatInput.value = "";
 
-          // Send active page text to Gemini API
-          generateSummary(key, response.text)
+          // Send active page text to selected API
+          const summaryPromise = engine === 'gemini' 
+            ? generateSummary(key, response.text) 
+            : generateGroqSummary(key, response.text);
+
+          summaryPromise
             .then((summary) => {
               originalSummary = summary;
               loadingContainer.classList.add('hidden');
@@ -184,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch((err) => {
               loadingContainer.classList.add('hidden');
               resultContainer.classList.remove('hidden');
-              summaryText.innerHTML = `<span class="error-message">Gemini API Error: ${err.message}</span>`;
+              summaryText.innerHTML = `<span class="error-message">${engine === 'gemini' ? 'Gemini' : 'Groq'} API Error: ${err.message}</span>`;
             });
         } else {
           loadingContainer.classList.add('hidden');
@@ -202,7 +208,11 @@ document.addEventListener('DOMContentLoaded', () => {
       chatHistory.classList.add('hidden');
       chatInput.value = "";
 
-      generateSummary(key, mockText)
+      const summaryPromise = engine === 'gemini' 
+        ? generateSummary(key, mockText) 
+        : generateGroqSummary(key, mockText);
+
+      summaryPromise
         .then((summary) => {
           originalSummary = summary;
           loadingContainer.classList.add('hidden');
@@ -212,7 +222,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch((err) => {
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
-          summaryText.innerHTML = `<span class="error-message">Gemini API Error: ${err.message}</span>`;
+          summaryText.innerHTML = `<span class="error-message">${engine === 'gemini' ? 'Gemini' : 'Groq'} API Error: ${err.message}</span>`;
         });
     }
   });
@@ -239,9 +249,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const query = chatInput.value.trim();
     if (!query) return;
 
-    const key = apiKeyInput.value.trim();
+    const engine = engineSelect.value;
+    const key = engine === 'gemini' ? apiKeyInput.value.trim() : groqApiKeyInput.value.trim();
+    
     if (!key) {
-      alert('Please save a valid Gemini API Key first!');
+      alert(`Please save a valid ${engine === 'gemini' ? 'Gemini' : 'Groq'} API Key first!`);
       return;
     }
 
@@ -273,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const typingBubble = document.createElement('div');
     typingBubble.className = 'chat-message chat-message-gemini';
     typingBubble.innerHTML = `
-      <span class="chat-sender">Gemini</span>
+      <span class="chat-sender">${engine === 'gemini' ? 'Gemini' : 'Groq (Llama 3)'}</span>
       <div class="chat-bubble bubble-gemini typing-loader">
         <span class="dot"></span>
         <span class="dot"></span>
@@ -302,27 +314,32 @@ ${query}`;
 
       conversationHistory.push({
         role: "user",
-        parts: [{ text: firstPrompt }]
+        content: firstPrompt
       });
     } else {
       conversationHistory.push({
         role: "user",
-        parts: [{ text: query }]
+        content: query
       });
     }
 
     try {
-      const answer = await callGeminiChatAPI(key, conversationHistory);
+      let answer = "";
+      if (engine === 'gemini') {
+        answer = await callGeminiChatAPI(key, conversationHistory);
+      } else {
+        answer = await callGroqChatAPI(key, conversationHistory);
+      }
       
       // Save LLM response to state
       conversationHistory.push({
-        role: "model",
-        parts: [{ text: answer }]
+        role: "assistant",
+        content: answer
       });
 
       // 4. Replace Typing Bubble with real answer
       typingBubble.innerHTML = `
-        <span class="chat-sender">Gemini</span>
+        <span class="chat-sender">${engine === 'gemini' ? 'Gemini' : 'Groq (Llama 3)'}</span>
         <div class="chat-bubble bubble-gemini">
           ${parseMarkdown(answer)}
         </div>
@@ -333,7 +350,7 @@ ${query}`;
 
       // Render API error inside bubble
       typingBubble.innerHTML = `
-        <span class="chat-sender">Gemini</span>
+        <span class="chat-sender">${engine === 'gemini' ? 'Gemini' : 'Groq (Llama 3)'}</span>
         <div class="chat-bubble bubble-gemini bubble-error">
           Error: ${err.message}
         </div>
@@ -361,13 +378,19 @@ ${query}`;
   async function callGeminiChatAPI(apiKey, contentsPayload) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
 
+    // Map to Gemini wire format
+    const geminiPayload = contentsPayload.map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    }));
+
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        contents: contentsPayload,
+        contents: geminiPayload,
         generationConfig: {
           temperature: 0.3,
           topP: 0.95,
@@ -385,6 +408,44 @@ ${query}`;
     const data = await response.json();
     if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
       return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error("No answer generated. Content may have violated safety filters.");
+    }
+  }
+
+  // Call Groq API inside a chat session
+  async function callGroqChatAPI(apiKey, contentsPayload) {
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
+
+    // Map content payload to Groq/OpenAI structure
+    const groqMessages = contentsPayload.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    }));
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: "llama3-8b-8192",
+        messages: groqMessages,
+        temperature: 0.3,
+        max_tokens: 1024
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    if (data.choices && data.choices[0]?.message?.content) {
+      return data.choices[0].message.content;
     } else {
       throw new Error("No answer generated. Content may have violated safety filters.");
     }
@@ -456,6 +517,64 @@ ${truncatedText}
     const data = await response.json();
     if (data.candidates && data.candidates[0]?.content?.parts?.[0]?.text) {
       return data.candidates[0].content.parts[0].text;
+    } else {
+      throw new Error("No summary generated. The page content might have been filtered or blocked.");
+    }
+  }
+
+  // Call Groq API to generate the summary
+  async function generateGroqSummary(apiKey, pageText) {
+    const url = 'https://api.groq.com/openai/v1/chat/completions';
+    
+    // Trim text if it exceeds a reasonable token limit (e.g. ~60k characters for Llama 3 8B context window)
+    const maxChars = 60000;
+    const truncatedText = pageText.length > maxChars 
+      ? pageText.substring(0, maxChars) + "\n...[Content truncated for length]..." 
+      : pageText;
+
+    const prompt = `You are an elite, highly concise webpage summarizer. Below is the text extracted from the active webpage. Please analyze and summarize it.
+
+Follow these strict output guidelines:
+1. Provide a professional, engaging summary at the top (2-3 sentences).
+2. Create a "## Key Takeaways" section with 4-6 bullet points highlighting the most important facts/insights.
+3. If applicable, add a "## Notable Details" section with any key statistics, names, dates, or technical facts.
+4. Keep the tone objective and informative. Avoid phrases like "based on the text" or "this article says". Go straight to the information.
+
+Webpage Content to Summarize:
+---
+${truncatedText}
+---`;
+
+    const requestBody = {
+      model: "llama3-8b-8192",
+      messages: [
+        {
+          role: "user",
+          content: prompt
+        }
+      ],
+      temperature: 0.2,
+      max_tokens: 2048
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify(requestBody)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      const errorMessage = errorData.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+      throw new Error(errorMessage);
+    }
+
+    const data = await response.json();
+    if (data.choices && data.choices[0]?.message?.content) {
+      return data.choices[0].message.content;
     } else {
       throw new Error("No summary generated. The page content might have been filtered or blocked.");
     }
