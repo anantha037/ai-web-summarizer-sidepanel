@@ -85,14 +85,14 @@ document.addEventListener('DOMContentLoaded', () => {
         if (chrome.runtime.lastError) {
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
-          summaryText.innerHTML = `<span class="text-rose-400">Error: ${chrome.runtime.lastError.message}</span>`;
+          summaryText.innerHTML = `<span class="error-message">Error: ${chrome.runtime.lastError.message}</span>`;
           return;
         }
 
         if (response && response.error) {
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
-          summaryText.innerHTML = `<span class="text-rose-400">Error: ${response.error}</span>`;
+          summaryText.innerHTML = `<span class="error-message">Error: ${response.error}</span>`;
         } else if (response && response.text) {
           // Store extracted text for Q&A context
           extractedPageText = response.text;
@@ -114,12 +114,12 @@ document.addEventListener('DOMContentLoaded', () => {
             .catch((err) => {
               loadingContainer.classList.add('hidden');
               resultContainer.classList.remove('hidden');
-              summaryText.innerHTML = `<span class="text-rose-400">Gemini API Error: ${err.message}</span>`;
+              summaryText.innerHTML = `<span class="error-message">Gemini API Error: ${err.message}</span>`;
             });
         } else {
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
-          summaryText.innerHTML = `<span class="text-rose-400">Error: No content returned from page.</span>`;
+          summaryText.innerHTML = `<span class="error-message">Error: No content returned from page.</span>`;
         }
       });
     } else {
@@ -142,7 +142,7 @@ document.addEventListener('DOMContentLoaded', () => {
         .catch((err) => {
           loadingContainer.classList.add('hidden');
           resultContainer.classList.remove('hidden');
-          summaryText.innerHTML = `<span class="text-rose-400">Gemini API Error: ${err.message}</span>`;
+          summaryText.innerHTML = `<span class="error-message">Gemini API Error: ${err.message}</span>`;
         });
     }
   });
@@ -153,10 +153,10 @@ document.addEventListener('DOMContentLoaded', () => {
     navigator.clipboard.writeText(summaryText.innerText).then(() => {
       const originalText = copyBtn.innerHTML;
       copyBtn.innerHTML = `
-        <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <svg class="icon icon-xs icon-success" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
         </svg>
-        <span class="text-emerald-400">Copied!</span>
+        <span class="text-success">Copied!</span>
       `;
       setTimeout(() => {
         copyBtn.innerHTML = originalText;
@@ -178,15 +178,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Disable input controls during API fetch
     chatInput.disabled = true;
     sendChatBtn.disabled = true;
-    chatInput.classList.add('opacity-50');
-    sendChatBtn.classList.add('opacity-50');
 
     // 1. Add User Question Bubble
     const userBubble = document.createElement('div');
-    userBubble.className = 'flex flex-col items-end space-y-1';
+    userBubble.className = 'chat-message chat-message-user';
     userBubble.innerHTML = `
-      <span class="text-[10px] text-slate-400 font-semibold mr-1">You</span>
-      <div class="bg-indigo-600 text-slate-100 rounded-2xl rounded-tr-none px-3.5 py-2 max-w-[85%] break-words shadow-sm">
+      <span class="chat-sender">You</span>
+      <div class="chat-bubble bubble-user">
         ${escapeHtml(query)}
       </div>
     `;
@@ -203,13 +201,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // 2. Add Bouncing Typing Loader Bubble
     const typingBubble = document.createElement('div');
-    typingBubble.className = 'flex flex-col items-start space-y-1';
+    typingBubble.className = 'chat-message chat-message-gemini';
     typingBubble.innerHTML = `
-      <span class="text-[10px] text-indigo-400 font-semibold ml-1">Gemini</span>
-      <div class="bg-slate-900 border border-slate-800 text-slate-400 rounded-2xl rounded-tl-none px-3.5 py-2 max-w-[85%] shadow-sm flex items-center space-x-1">
-        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-        <span class="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+      <span class="chat-sender">Gemini</span>
+      <div class="chat-bubble bubble-gemini typing-loader">
+        <span class="dot"></span>
+        <span class="dot"></span>
+        <span class="dot"></span>
       </div>
     `;
     chatHistory.appendChild(typingBubble);
@@ -254,8 +252,8 @@ ${query}`;
 
       // 4. Replace Typing Bubble with real answer
       typingBubble.innerHTML = `
-        <span class="text-[10px] text-indigo-400 font-semibold ml-1">Gemini</span>
-        <div class="bg-slate-900 border border-slate-800 text-slate-200 rounded-2xl rounded-tl-none px-3.5 py-2 max-w-[85%] break-words shadow-sm leading-relaxed">
+        <span class="chat-sender">Gemini</span>
+        <div class="chat-bubble bubble-gemini">
           ${parseMarkdown(answer)}
         </div>
       `;
@@ -265,8 +263,8 @@ ${query}`;
 
       // Render API error inside bubble
       typingBubble.innerHTML = `
-        <span class="text-[10px] text-rose-400 font-semibold ml-1">Gemini</span>
-        <div class="bg-slate-900 border border-rose-900/30 text-rose-400 rounded-2xl rounded-tl-none px-3.5 py-2 max-w-[85%] break-words shadow-sm">
+        <span class="chat-sender">Gemini</span>
+        <div class="chat-bubble bubble-gemini bubble-error">
           Error: ${err.message}
         </div>
       `;
@@ -274,8 +272,6 @@ ${query}`;
       // Re-enable inputs
       chatInput.disabled = false;
       sendChatBtn.disabled = false;
-      chatInput.classList.remove('opacity-50');
-      sendChatBtn.classList.remove('opacity-50');
       chatInput.focus();
 
       // Scroll to bottom
@@ -406,15 +402,15 @@ ${truncatedText}
       .replace(/>/g, "&gt;");
 
     // Headings
-    html = html.replace(/^(?:###)\s+(.+)$/gm, '<h4 class="text-xs font-semibold text-indigo-400 mt-4 mb-2">$1</h4>');
-    html = html.replace(/^(?:##)\s+(.+)$/gm, '<h3 class="text-xs font-semibold uppercase tracking-wider text-indigo-400 mt-5 mb-2 pb-1 border-b border-slate-800">$1</h3>');
-    html = html.replace(/^(?:#)\s+(.+)$/gm, '<h2 class="text-sm font-bold text-purple-400 mt-6 mb-3">$1</h2>');
+    html = html.replace(/^(?:###)\s+(.+)$/gm, '<h4 class="md-h3">$1</h4>');
+    html = html.replace(/^(?:##)\s+(.+)$/gm, '<h3 class="md-h2">$1</h3>');
+    html = html.replace(/^(?:#)\s+(.+)$/gm, '<h2 class="md-h1">$1</h2>');
 
     // Bold text (**text**)
-    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-indigo-300">$1</strong>');
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="md-strong">$1</strong>');
     
     // Bullet points (- or * )
-    html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="ml-4 list-disc pl-1 my-1 text-slate-300">$1</li>');
+    html = html.replace(/^\s*[-*]\s+(.+)$/gm, '<li class="md-li">$1</li>');
 
     // Handle newlines
     html = html.replace(/\n/g, '<br>');
@@ -424,9 +420,9 @@ ${truncatedText}
 
   function updateKeyStatus(isSaved) {
     if (isSaved) {
-      keyStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse"></span><span class="text-emerald-400 font-sans">Saved</span>`;
+      keyStatus.innerHTML = `<span class="status-dot status-saved"></span><span class="text-saved">Saved</span>`;
     } else {
-      keyStatus.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500 inline-block mr-1"></span><span class="text-rose-400 font-sans">Not Saved</span>`;
+      keyStatus.innerHTML = `<span class="status-dot status-unsaved"></span><span class="text-unsaved">Not Saved</span>`;
     }
   }
 
@@ -434,16 +430,14 @@ ${truncatedText}
     const originalContent = saveKeyBtn.textContent;
     saveKeyBtn.textContent = message;
     if (type === 'success') {
-      saveKeyBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
-      saveKeyBtn.classList.add('bg-emerald-600', 'hover:bg-emerald-500');
+      saveKeyBtn.classList.add('btn-success');
     } else {
-      saveKeyBtn.classList.remove('bg-indigo-600', 'hover:bg-indigo-500');
-      saveKeyBtn.classList.add('bg-rose-600', 'hover:bg-rose-500');
+      saveKeyBtn.classList.add('btn-danger');
     }
 
     setTimeout(() => {
       saveKeyBtn.textContent = originalContent;
-      saveKeyBtn.className = 'bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs rounded-lg px-4 py-2 hover:shadow-lg hover:shadow-indigo-500/20 active:scale-95 transition-all font-sans';
+      saveKeyBtn.classList.remove('btn-success', 'btn-danger');
     }, 1500);
   }
 });
