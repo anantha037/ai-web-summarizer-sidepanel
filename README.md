@@ -12,6 +12,42 @@ A production-grade, highly fluid, and resizable Google Chrome Side Panel extensi
 
 ---
 
+## Setup & Installation
+
+### 📋 Prerequisites (BYOK Architecture)
+This extension is built on a **Bring Your Own Key (BYOK)** architecture. To use it, you must procure your own API credentials directly from the providers. There are no intermediary proxy servers or compute costs charged by the extension.
+- **Google Gemini Key**: Obtain a free API key from the [Google AI Studio Console](https://aistudio.google.com/).
+- **Groq API Key**: Obtain an API key from the [Groq Console](https://console.groq.com/).
+
+### 🛠️ Developer Setup
+Follow these steps to clone and load the unpacked extension in developer mode:
+
+1. **Clone the Repository**:
+   Open a terminal and run the following command to download the codebase locally:
+   ```bash
+   git clone https://github.com/anantha037/ai-web-summarizer-sidepanel.git
+   ```
+   *(Alternatively, download and extract the ZIP archive of the source code).*
+
+2. **Access Extension Controls**:
+   Open Google Chrome (or any Chromium-based browser) and navigate to the extensions management console:
+   ```text
+   chrome://extensions/
+   ```
+
+3. **Enable Developer Mode**:
+   Locate the **Developer mode** toggle switch in the top-right corner of the window and turn it **ON**.
+
+4. **Load the Codebase**:
+   - Click the **Load unpacked** button in the top-left corner.
+   - In the file selection dialog, navigate to the folder containing the cloned files (ensure you select the root directory where `manifest.json` is located) and click **Select Folder**.
+
+5. **Pin the Icon**:
+   - Click the puzzle piece icon (Extensions toolbar menu) in Chrome.
+   - Find **Webpage Summarizer & Q&A** and click the pin icon next to it for quick launch visibility.
+
+---
+
 ## Core Overview & Value Proposition
 
 Traditional Chrome extensions rely on small, rigid, top-right popup windows that close immediately when clicking outside their boundaries, resulting in lost state and fragmented user experiences. 
@@ -64,43 +100,7 @@ graph TD
 
 - **Generic History Schema**: Pushes conversation records into a standard `{ role: "user" | "assistant", content: string }` array.
 - **Translators**: Specialized translation methods (`callGeminiChatAPI` and `callGroqChatAPI`) map standard history states to their respective API-specific structures (e.g. converting role namespaces or nested object payloads) on the fly.
-- ** स्मार्ट Clean-Up**: When restoring conversation bubbles, the UI reads the raw stored history and strips away internal prompt context markers, ensuring the user only sees clean, user-friendly speech bubbles.
+- **Smart Clean-Up**: When restoring conversation bubbles, the UI reads the raw stored history and strips away internal prompt context markers, ensuring the user only sees clean, user-friendly speech bubbles.
 
 ### Manifest V3 CSP Compliance
 Strict Manifest V3 Content Security Policies prohibit external CDN script injections or stylesheet links to avoid vector vulnerabilities. This extension strictly complies by omitting all external CSS/JS libraries (such as Tailwind CDN) and recreating premium layouts entirely through a custom, highly optimized, and modular local stylesheet (`popup.css`).
-
----
-
-## Chronological Development Track (Commit Log)
-
-Our Git repository follows the **Conventional Commits** specification to ensure clean version histories and trace development milestones:
-
-1. `feat: initialize chrome extension workspace and manifest skeleton`
-2. `feat: implement raw text extraction script and basic popup UI`
-3. `feat: implement background worker and content script for text extraction`
-4. `feat: integrate Gemini API and custom markdown parser`
-5. `feat: implement multi-turn conversational chat and mini-RAG loop`
-6. `fix: replace blocked Tailwind CDN with local custom CSS to resolve CSP violations`
-7. `feat: implement dual API UI and state management for Gemini and Groq`
-8. `feat: implement dual API router and adapter pattern for multi-model chat state`
-9. `feat: implement dynamic output formatting and prompt generation`
-10. `feat: implement URL-keyed chat history persistence`
-11. `feat: implement context menu for summarizing highlighted text selections`
-12. `feat: implement YouTube transcript extraction via ytInitialPlayerResponse`
-13. `feat: migrate extension architecture from popup to native Chrome SidePanel API`
-14. `feat: implement layout fluidity refactor for side panel resizing`
-15. `fix: add host_permissions and implement raw HTML fetch to bypass YouTube SPA caching`
-
----
-
-## Setup & Installation
-
-Follow these instructions to run the extension locally in developer mode:
-
-1. Clone or download this repository to your local machine.
-2. Open Google Chrome (or any Chromium-based browser) and navigate to `chrome://extensions/`.
-3. Enable **Developer mode** by toggling the switch in the top-right corner.
-4. Click the **Load unpacked** button in the top-left corner.
-5. Select the root directory containing the extension files (where `manifest.json` is located).
-6. Click the extension toolbar icon to pin the extension.
-7. Open any webpage or YouTube video, open the side panel, enter your API key, and begin summarizing!
